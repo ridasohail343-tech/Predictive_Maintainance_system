@@ -1,8 +1,25 @@
-.venv/
+
+# Virtual environment
+myenv/
+venv/
 __pycache__/
 *.pyc
+
+# Python cache
+.pytest_cache/
+
+# Data files
+data/raw/
+data/processed/*.csv
+
+# Database
+*.db
+
+# Model artifacts
+artifacts/*.pkl
+
+# Environment variables
 .env
-data/raw/*
-data/processed/*
-artifacts/*
-mlruns/
+
+# IDE
+.vscode/
