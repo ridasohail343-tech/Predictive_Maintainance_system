@@ -13,6 +13,34 @@ st.set_page_config(
 
 st.title("Predictive Maintenance Dashboard")
 
+# Database path
+db_path = Path(__file__).resolve().parents[1] / "maintenance.db"
+
+
+# Create database and table
+def create_database():
+
+    conn = sqlite3.connect(db_path)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            TP2 REAL,
+            TP3 REAL,
+            H1 REAL,
+            Motor_current REAL,
+            prediction TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+create_database()
+
+
 # Sensor input form
 st.subheader("Enter Sensor Readings")
 
@@ -23,7 +51,9 @@ with st.form("sensor_form"):
     h1 = st.number_input("H1", value=3.3)
     motor = st.number_input("Motor Current", value=4.4)
 
-    submitted = st.form_submit_button("Predict Equipment Status")
+    submitted = st.form_submit_button(
+        "Predict Equipment Status"
+    )
 
     if submitted:
 
@@ -37,43 +67,66 @@ with st.form("sensor_form"):
         try:
             response = requests.post(
                 "http://127.0.0.1:8000/predict",
-                json=sensor_data
+                json=sensor_data,
+                timeout=15
             )
 
             if response.status_code == 200:
+
                 result = response.json()["prediction"]
+
                 st.success(f"Prediction: {result}")
+
                 st.rerun()
+
             else:
                 st.error("Prediction failed.")
 
         except requests.exceptions.ConnectionError:
-            st.error("FastAPI is not running. Start the backend first.")
+            st.error("FastAPI server is not running.")
 
-# Database connection
-db_path = Path(__file__).resolve().parents[1] / "maintenance.db"
+        except requests.exceptions.Timeout:
+            st.error("Prediction request timed out.")
 
-conn = sqlite3.connect(db_path)
 
 # Fetch prediction history
+conn = sqlite3.connect(db_path)
+
 df = pd.read_sql_query(
-    "SELECT * FROM predictions ORDER BY timestamp DESC",
+    """
+    SELECT *
+    FROM predictions
+    ORDER BY timestamp DESC
+    """,
     conn
 )
 
 conn.close()
 
+
 # Calculate metrics
 total = len(df)
-anomalies = (df["prediction"] == "Anomaly Detected").sum()
-normal = (df["prediction"] == "Normal").sum()
+
+anomalies = (
+    df["prediction"] == "Anomaly Detected"
+).sum()
+
+normal = (
+    df["prediction"] == "Normal"
+).sum()
+
 
 # Display metrics
+st.subheader("Prediction Overview")
+
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Total Predictions", total)
+
 col2.metric("Anomalies Detected", anomalies)
+
 col3.metric("Normal Readings", normal)
+
 
 # Anomaly distribution chart
 st.subheader("Equipment Anomaly Analysis")
@@ -94,6 +147,7 @@ if total > 0:
 else:
     st.info("No predictions available yet.")
 
+
 # Equipment health status
 st.subheader("Equipment Health Status")
 
@@ -102,16 +156,29 @@ if total > 0:
     latest_prediction = df.iloc[0]["prediction"]
 
     if latest_prediction == "Anomaly Detected":
-        st.error("Equipment Status: WARNING - Anomaly Detected")
+
+        st.error(
+            "WARNING: Anomaly Detected"
+        )
+
     else:
-        st.success("Equipment Status: NORMAL")
+
+        st.success(
+            "Equipment Status: NORMAL"
+        )
 
 else:
     st.info("Waiting for sensor predictions.")
 
+
 # Prediction history
 st.subheader("Prediction History")
-st.dataframe(df, use_container_width=True)
+
+st.dataframe(
+    df,
+    use_container_width=True
+)
+
 
 # Download prediction history
 csv = df.to_csv(index=False).encode("utf-8")
